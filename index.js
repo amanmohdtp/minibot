@@ -25,7 +25,7 @@ async function start() {
         version
     });
 
-    // Generate pairing code
+    // Pairing code
     if (!sock.authState.creds.registered) {
         const code = await sock.requestPairingCode(config.owner);
         console.log("\n🔗 Pair Code:", code, "\n");
@@ -33,6 +33,7 @@ async function start() {
 
     sock.ev.on("creds.update", saveCreds);
 
+    // ======================= MESSAGE HANDLER ======================= //
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const m = messages[0];
         if (!m.message) return;
@@ -46,6 +47,9 @@ async function start() {
             m.message.extendedTextMessage?.text ||
             "";
 
+        // Owner check
+        const isOwner = sender.startsWith(config.owner);
+
         // Admin check
         let isAdmin = false;
         if (isGroup) {
@@ -54,14 +58,155 @@ async function start() {
             isAdmin = admins.some(a => a.id === sender);
         }
 
-        // ========= ANTI-LINK ========= //
+        // ================== ANTI-LINK ================== //
         const linkPattern = /(https?:\/\/[^\s]+)/gi;
 
-        if (antiLink && linkPattern.test(text) && isGroup && !isAdmin) {
+        if (antiLink && isGroup && linkPattern.test(text) && !isAdmin && !isOwner) {
             try { await sock.sendMessage(from, { delete: m.key }); } catch {}
 
             warns[sender] = (warns[sender] || 0) + 1;
 
+            await sock.sendMessage(from, {
+                text: `⚠️ @${sender.split("@")[0]} sent a link!\nWarning: *${warns[sender]}/${config.warnLimit}*`,
+                mentions: [sender]
+            });
+
+            if (warns[sender] >= config.warnLimit) {
+                await sock.groupParticipantsUpdate(from, [sender], "remove");
+                await sock.sendMessage(from, {
+                    text: `🚨 @${sender.split("@")[0]} removed (max warnings reached)`,
+                    mentions: [sender]
+                });
+                warns[sender] = 0;
+            }
+            return;
+        }
+
+        // Ignore non-commands
+        if (!text.startsWith(".")) return;
+
+        const cmd = text.split(" ")[0].toLowerCase();
+
+        // Admin-only commands
+        const adminOnly = [".tagall", ".kick", ".warn", ".open", ".close", ".antilink"];
+        if (adminOnly.includes(cmd) && !isAdmin && !isOwner) {
+            return sock.sendMessage(from, { text: "❌ Only *admins* can use this command." });
+        }
+
+        // ======================= COMMANDS ======================= //
+
+        // .ping
+        if (cmd === ".ping") {
+            return sock.sendMessage(from, { text: "🏓 Pong!" });
+        }
+
+        // .antilink
+        if (cmd === ".antilink") {
+            if (text.includes("on")) {
+                antiLink = true;
+                return sock.sendMessage(from, { text: "🔰 Anti-Link Enabled" });
+            }
+            if (text.includes("off")) {
+                antiLink = false;
+                return sock.sendMessage(from, { text: "⭕ Anti-Link Disabled" });
+            }
+        }
+
+        // .tagall
+        if (cmd === ".tagall" && isGroup) {
+            const group = await sock.groupMetadata(from);
+            let mentions = [];
+            let msg = "📢 *Tagging Everyone:*\n\n";
+
+            for (let p of group.participants) {
+                mentions.push(p.id);
+                msg += `@${p.id.split("@")[0]}\n`;
+            }
+
+            return sock.sendMessage(from, { text: msg, mentions });
+        }
+
+        // .kick
+        if (cmd === ".kick" && isGroup) {
+            let target = m.message.extendedTextMessage?.contextInfo?.participant;
+            if (!target) return sock.sendMessage(from, { text: "Mention a user to kick." });
+
+            await sock.groupParticipantsUpdate(from, [target], "remove");
+            return sock.sendMessage(from, {
+                text: `👢 Kicked @${target.split("@")[0]}`,
+                mentions: [target]
+            });
+        }
+
+        // .warn
+        if (cmd === ".warn" && isGroup) {
+            let target = m.message.extendedTextMessage?.contextInfo?.participant;
+            if (!target) return sock.sendMessage(from, { text: "Mention a user." });
+
+            warns[target] = (warns[target] || 0) + 1;
+
+            await sock.sendMessage(from, {
+                text: `⚠️ @${target.split("@")[0]} warned (${warns[target]}/${config.warnLimit})`,
+                mentions: [target]
+            });
+
+            if (warns[target] >= config.warnLimit) {
+                await sock.groupParticipantsUpdate(from, [target], "remove");
+                await sock.sendMessage(from, {
+                    text: `🚨 @${target.split("@")[0]} removed (max warnings reached)`,
+                    mentions: [target]
+                });
+                warns[target] = 0;
+            }
+        }
+
+        // .open group
+        if (cmd === ".open" && isGroup) {
+            await sock.groupSettingUpdate(from, "not_announcement");
+            return sock.sendMessage(from, { text: "🔓 Group opened." });
+        }
+
+        // .close group
+        if (cmd === ".close" && isGroup) {
+            await sock.groupSettingUpdate(from, "announcement");
+            return sock.sendMessage(from, { text: "🔒 Group closed." });
+        }
+
+        // .menu
+        if (cmd === ".menu") {
+            let u = process.uptime();
+            let h = Math.floor(u / 3600);
+            let mnt = Math.floor((u % 3600) / 60);
+            let s = Math.floor(u % 60);
+
+            const menu = `
+╔══✦ *MiniBot Menu* ✦══╗
+
+👑 Owner: ${config.owner}
+⚡ Uptime: ${h}h ${mnt}m ${s}s
+🧩 Anti-Link: ${antiLink ? "ON ✅" : "OFF ❌"}
+
+🎯 Commands
+• .menu
+• .ping
+• .tagall
+• .kick
+• .warn
+• .open
+• .close
+• .antilink on/off
+
+╚════════════════════╝
+`;
+
+            return sock.sendMessage(from, { text: menu });
+        }
+
+    }); // end handler
+
+} // end start
+
+start();
             await sock.sendMessage(from, {
                 text: `⚠️ @${sender.split("@")[0]} sent a link!\nWarning: *${warns[sender]}/${config.warnLimit}*`,
                 mentions: [sender]
