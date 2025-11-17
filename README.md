@@ -2,3 +2,7 @@ ONLY WORKS ON PANEL WITH 1GB RAM SERVER
 ( PREFERENCE : OPTILINK )
 
 EDIT PHONE NO. ON CONFIG FILE
+
+
+ADDITIONAL NODE PACKAGE VARIABLE :
+@whiskeysockets/baileys qrcode-terminal pino node-fetch
