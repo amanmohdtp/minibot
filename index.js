@@ -25,7 +25,6 @@ async function start() {
         version
     });
 
-    // Pairing code
     if (!sock.authState.creds.registered) {
         const code = await sock.requestPairingCode(config.owner);
         console.log("\n🔗 Pair Code:", code, "\n");
@@ -33,7 +32,7 @@ async function start() {
 
     sock.ev.on("creds.update", saveCreds);
 
-    // ======================= MESSAGE HANDLER ======================= //
+    // MESSAGE HANDLER
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const m = messages[0];
         if (!m.message) return;
@@ -47,10 +46,9 @@ async function start() {
             m.message.extendedTextMessage?.text ||
             "";
 
-        // Owner check
         const isOwner = sender.startsWith(config.owner);
 
-        // Admin check
+        // ADMIN CHECK
         let isAdmin = false;
         if (isGroup) {
             const group = await sock.groupMetadata(from);
@@ -58,7 +56,8 @@ async function start() {
             isAdmin = admins.some(a => a.id === sender);
         }
 
-        // ================== ANTI-LINK ================== //
+        // =================== ANTI-LINK =================== //
+
         const linkPattern = /(https?:\/\/[^\s]+)/gi;
 
         if (antiLink && isGroup && linkPattern.test(text) && !isAdmin && !isOwner) {
@@ -66,6 +65,158 @@ async function start() {
 
             warns[sender] = (warns[sender] || 0) + 1;
 
+            await sock.sendMessage(from, {
+                text: `⚠️ @${sender.split("@")[0]} sent a link!\nWarning: *${warns[sender]}/${config.warnLimit}*`,
+                mentions: [sender]
+            });
+
+            if (warns[sender] >= config.warnLimit) {
+                await sock.groupParticipantsUpdate(from, [sender], "remove");
+
+                await sock.sendMessage(from, {
+                    text: `🚨 @${sender.split("@")[0]} removed (max warnings reached)`,
+                    mentions: [sender]
+                });
+
+                warns[sender] = 0;
+            }
+            return;
+        }
+
+        // ONLY COMMANDS BELOW
+        if (!text.startsWith(".")) return;
+
+        const cmd = text.split(" ")[0].toLowerCase();
+
+        // Admin only commands
+        const adminOnly = [".tagall", ".kick", ".warn", ".open", ".close", ".antilink"];
+
+        if (adminOnly.includes(cmd) && !isAdmin && !isOwner) {
+            return sock.sendMessage(from, { text: "❌ Only admins can use this command." });
+        }
+
+        // ================= COMMANDS ================= //
+
+        // .ping
+        if (cmd === ".ping") {
+            return sock.sendMessage(from, { text: "🏓 Pong!" });
+        }
+
+        // .antilink
+        if (cmd === ".antilink") {
+            if (text.includes("on")) {
+                antiLink = true;
+                return sock.sendMessage(from, { text: "🔰 Anti-Link Enabled" });
+            }
+            if (text.includes("off")) {
+                antiLink = false;
+                return sock.sendMessage(from, { text: "⭕ Anti-Link Disabled" });
+            }
+        }
+
+        // .tagall
+        if (cmd === ".tagall" && isGroup) {
+            const group = await sock.groupMetadata(from);
+
+            const mentions = group.participants.map(p => p.id);
+            const names = mentions.map(a => `@${a.split("@")[0]}`).join("\n");
+
+            return sock.sendMessage(from, {
+                text: `📢 *Tagging Everyone:*\n\n${names}`,
+                mentions
+            });
+        }
+
+        // .kick
+        if (cmd === ".kick" && isGroup) {
+            let target =
+                m.message.extendedTextMessage?.contextInfo?.participant ||
+                m.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+
+            if (!target)
+                return sock.sendMessage(from, { text: "Reply or mention a user to kick." });
+
+            await sock.groupParticipantsUpdate(from, [target], "remove");
+
+            return sock.sendMessage(from, {
+                text: `👢 Kicked @${target.split("@")[0]}`,
+                mentions: [target]
+            });
+        }
+
+        // .warn
+        if (cmd === ".warn" && isGroup) {
+            let target =
+                m.message.extendedTextMessage?.contextInfo?.participant ||
+                m.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+
+            if (!target)
+                return sock.sendMessage(from, { text: "Reply or mention a user to warn." });
+
+            warns[target] = (warns[target] || 0) + 1;
+
+            await sock.sendMessage(from, {
+                text: `⚠️ @${target.split("@")[0]} warned (${warns[target]}/${config.warnLimit})`,
+                mentions: [target]
+            });
+
+            if (warns[target] >= config.warnLimit) {
+                await sock.groupParticipantsUpdate(from, [target], "remove");
+
+                await sock.sendMessage(from, {
+                    text: `🚨 @${target.split("@")[0]} removed (max warnings reached)`,
+                    mentions: [target]
+                });
+
+                warns[target] = 0;
+            }
+        }
+
+        // .open
+        if (cmd === ".open" && isGroup) {
+            await sock.groupSettingUpdate(from, "not_announcement");
+            return sock.sendMessage(from, { text: "🔓 Group opened." });
+        }
+
+        // .close
+        if (cmd === ".close" && isGroup) {
+            await sock.groupSettingUpdate(from, "announcement");
+            return sock.sendMessage(from, { text: "🔒 Group closed." });
+        }
+
+        // .menu
+        if (cmd === ".menu") {
+            const u = process.uptime();
+            const h = Math.floor(u / 3600);
+            const mnt = Math.floor((u % 3600) / 60);
+            const s = Math.floor(u % 60);
+
+            const menu = `
+╔══✦ *MiniBot Menu* ✦══╗
+
+👑 Owner: ${config.owner}
+⚡ Uptime: ${h}h ${mnt}m ${s}s
+🧩 Anti-Link: ${antiLink ? "ON ✅" : "OFF ❌"}
+
+🎯 Commands
+• .menu
+• .ping
+• .tagall
+• .kick
+• .warn
+• .open
+• .close
+• .antilink on/off
+
+╚════════════════════╝
+`;
+
+            return sock.sendMessage(from, { text: menu });
+        }
+    });
+}
+
+start();
             await sock.sendMessage(from, {
                 text: `⚠️ @${sender.split("@")[0]} sent a link!\nWarning: *${warns[sender]}/${config.warnLimit}*`,
                 mentions: [sender]
