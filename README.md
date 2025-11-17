@@ -3,18 +3,13 @@
 Optimized for OptiLink Panel | Buttons Support | Typing Animation | Easy Config
 
 This WhatsApp bot runs smoothly on 1GB RAM servers and panels.
-Built using @whiskeysockets/baileys, with a clean structure, buttons, and smooth typing animation.
-
+Built using @whiskeysockets/baileys, with a clean structure.
 
 ---
 
 📌 Features
 
 Runs perfectly on 1GB RAM panels (OptiLink preferred)
-
-Interactive buttons
-
-Smooth typing animation
 
 Clean config.js (edit your owner number easily)
 
