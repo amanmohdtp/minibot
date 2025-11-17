@@ -1,6 +1,6 @@
 📡 WhatsApp Bot (Baileys) — Lightweight 1GB RAM Version
 
-Optimized for OptiLink Panel | Buttons Support | Typing Animation | Easy Config
+Optimized for OptiLink Panel | Easy Config
 
 This WhatsApp bot runs smoothly on 1GB RAM servers and panels.
 Built using @whiskeysockets/baileys, with a clean structure.
