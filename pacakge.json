@@ -1,10 +1,16 @@
 {
   "name": "whatsapp-mini-bot",
   "version": "1.1.0",
+  "description": "Simple WhatsApp Bot using Baileys",
   "main": "index.js",
   "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
     "@whiskeysockets/baileys": "latest",
-    "pino": "latest"
+    "pino": "latest",
+    "qrcode-terminal": "latest",
+    "node-fetch": "latest"
   }
 }
